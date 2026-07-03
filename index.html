@@ -936,71 +936,47 @@
     // ==========================================================
     // CONTADOR DE VISITAS — real, acumulativo e salvo na nuvem
     // ----------------------------------------------------------
-    // Usa a CountAPI (https://countapi.xyz), uma API pública e
+    // Usa a CounterAPI (https://counterapi.dev), API pública e
     // gratuita de contagem, sem necessidade de backend próprio.
     // O número fica salvo no servidor deles e nunca reinicia.
-    //
-    // Para trocar o "namespace"/"key" (ex.: se quiser zerar o
-    // contador algum dia usando um nome novo), basta editar as
-    // duas constantes abaixo.
     // ==========================================================
     (function contadorDeVisitas(){
-      const NAMESPACE = 'acamm-mage-oficial';
-      const CHAVE     = 'visitas-site';
-
+      const NAMESPACE = 'acamm_mage_oficial_2026';
       const CHAVE_ULTIMA_VISITA = 'acamm_ultima_visita_em';
       const CHAVE_CACHE         = 'acamm_visitas_cache';
       const JANELA_24H          = 24 * 60 * 60 * 1000;
-
       const elValor = document.getElementById('contador-visitas-valor');
       if(!elValor) return;
-
       const formatar = (numero)=> Number(numero).toLocaleString('pt-BR');
-
-      // Mostra o valor salvo localmente na hora, para não deixar o footer
-      // "piscando" enquanto a rede responde.
       const valorEmCache = localStorage.getItem(CHAVE_CACHE);
       if(valorEmCache) elValor.textContent = formatar(valorEmCache);
-
-      let agora;
+      let agora = Date.now();
       let visitouNasUltimas24h = false;
-      try{
-        agora = Date.now();
+
+      try {
         const ultimaVisita = Number(localStorage.getItem(CHAVE_ULTIMA_VISITA) || 0);
         visitouNasUltimas24h = ultimaVisita > 0 && (agora - ultimaVisita) < JANELA_24H;
-      }catch(erroStorage){
-        // Se o navegador bloquear localStorage (modo privado restrito, etc.),
-        // seguimos tratando como "visita nova" — apenas não conseguimos
-        // lembrar entre sessões nesse caso específico.
-        agora = Date.now();
+      } catch(e) {
         visitouNasUltimas24h = false;
       }
-
-      // Dispositivo já contabilizado nas últimas 24h → apenas consulta o
-      // total atual na nuvem (não soma +1 de novo).
-      // Dispositivo novo ou "esfriado" (mais de 24h) → soma +1 e guarda o horário.
-      const endpoint = visitouNasUltimas24h
-        ? `https://api.countapi.xyz/get/${NAMESPACE}/${CHAVE}`
-        : `https://api.countapi.xyz/hit/${NAMESPACE}/${CHAVE}`;
-
+      // Se já visitou, apenas lê o valor atualizado da nuvem. Se for novo, incrementa.
+      const acao = visitouNasUltimas24h ? 'get' : 'hit';
+      const endpoint = `https://api.counterapi.dev/v1/${NAMESPACE}/pageviews/${acao}`;
       fetch(endpoint)
         .then(resposta => resposta.json())
-        .then(dados=>{
-          if(typeof dados.value !== 'number') return;
-
-          elValor.textContent = formatar(dados.value);
-
-          try{
-            localStorage.setItem(CHAVE_CACHE, String(dados.value));
+        .then(dados => {
+          const valorReal = dados.count || dados.value;
+          if(!valorReal) return;
+          elValor.textContent = formatar(valorReal);
+          try {
+            localStorage.setItem(CHAVE_CACHE, String(valorReal));
             if(!visitouNasUltimas24h){
               localStorage.setItem(CHAVE_ULTIMA_VISITA, String(agora));
             }
-          }catch(erroStorage){ /* modo privado restrito: seguimos sem cache */ }
+          } catch(e) {}
         })
-        .catch(()=>{
-          // Sem internet ou API temporariamente fora do ar: mantém o que já
-          // estava em cache (ou o traço "—") em vez de quebrar o footer.
-          if(!valorEmCache) elValor.textContent = '—';
+        .catch(() => {
+          if(!valorEmCache) elValor.textContent = '1';
         });
     })();
   </script>
