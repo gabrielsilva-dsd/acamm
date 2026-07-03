@@ -936,9 +936,22 @@
     // ==========================================================
     // CONTADOR DE VISITAS — real, acumulativo e salvo na nuvem
     // ----------------------------------------------------------
-    // Usa a CounterAPI (https://counterapi.dev), API pública e
-    // gratuita de contagem, sem necessidade de backend próprio.
-    // O número fica salvo no servidor deles e nunca reinicia.
+    // Usa a Abacus (https://abacus.jasoncameron.dev), API pública,
+    // gratuita e sem backend próprio. O contador dela é "burro" de
+    // propósito: cada chamada em /hit soma +1 no servidor, sem
+    // nenhuma verificação de IP, rede ou origem da requisição.
+    //
+    // Isso resolve o problema do Wi-Fi compartilhado: como a API
+    // nunca soube o que é um "IP" para começar, dois celulares na
+    // mesma rede (mesmo IP público) somam normalmente, cada um o
+    // seu próprio +1.
+    //
+    // Quem decide se conta ou não é o NAVEGADOR, não o servidor:
+    // cada aparelho guarda no seu próprio localStorage o horário da
+    // sua última visita computada. Enquanto não passarem 24h desde
+    // então NESTE aparelho, ele só consulta o total (não soma de
+    // novo) — mas outro aparelho, com seu próprio localStorage vazio,
+    // soma o dele sem qualquer bloqueio cruzado.
     // ==========================================================
     (function contadorDeVisitas(){
       const NAMESPACE = 'acamm_mage_oficial_2026';
@@ -948,8 +961,12 @@
       const elValor = document.getElementById('contador-visitas-valor');
       if(!elValor) return;
       const formatar = (numero)=> Number(numero).toLocaleString('pt-BR');
+
+      // Mostra na hora o que já está salvo neste aparelho, evitando
+      // o footer "piscando" enquanto a rede responde.
       const valorEmCache = localStorage.getItem(CHAVE_CACHE);
       if(valorEmCache) elValor.textContent = formatar(valorEmCache);
+
       let agora = Date.now();
       let visitouNasUltimas24h = false;
 
@@ -957,25 +974,33 @@
         const ultimaVisita = Number(localStorage.getItem(CHAVE_ULTIMA_VISITA) || 0);
         visitouNasUltimas24h = ultimaVisita > 0 && (agora - ultimaVisita) < JANELA_24H;
       } catch(e) {
+        // localStorage bloqueado (modo privado restrito): trata como
+        // visita nova a cada carregamento, sem travar a página.
         visitouNasUltimas24h = false;
       }
-      // Se já visitou, apenas lê o valor atualizado da nuvem. Se for novo, incrementa.
+
+      // Este aparelho já contou nas últimas 24h → só consulta o total
+      // atual (GET, sem incrementar). Aparelho novo ou "esfriado" →
+      // soma +1 (HIT) e grava o horário só neste dispositivo.
       const acao = visitouNasUltimas24h ? 'get' : 'hit';
-      const endpoint = `https://api.counterapi.dev/v1/${NAMESPACE}/pageviews/${acao}`;
+      const endpoint = `https://abacus.jasoncameron.dev/${acao}/${NAMESPACE}/pageviews`;
+
       fetch(endpoint)
         .then(resposta => resposta.json())
         .then(dados => {
-          const valorReal = dados.count || dados.value;
-          if(!valorReal) return;
+          const valorReal = dados.value ?? dados.count;
+          if(typeof valorReal !== 'number') return;
           elValor.textContent = formatar(valorReal);
           try {
             localStorage.setItem(CHAVE_CACHE, String(valorReal));
             if(!visitouNasUltimas24h){
               localStorage.setItem(CHAVE_ULTIMA_VISITA, String(agora));
             }
-          } catch(e) {}
+          } catch(e) { /* modo privado restrito: segue sem cache */ }
         })
         .catch(() => {
+          // Sem internet ou API temporariamente fora do ar: mantém o
+          // que já estava em cache, em vez de quebrar o footer.
           if(!valorEmCache) elValor.textContent = '1';
         });
     })();
